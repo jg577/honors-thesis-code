@@ -1,0 +1,25 @@
+# ! / bin / bash
+rm -f outp . txt
+curl " http :// api . census . gov / data /2010/ sf1 ?
+get = P0010001 , P0030002 , P0030003 , P0030004 , P0030005 , P0030006 ,
+P0030007 , P0030008 ,
+P0040003 , P0120002 , P0130001
+& for = zip + code + tabulation + area :*& in = state :01&
+key =2 b44e23300ed4875432476f48462e597fec9843d " | head -n 1 |
+sed ’s / // g ’
+>> outp . txt
+for i in ‘ seq 2 50 ‘;
+do
+    link = " http :// api . census . gov / data /2010/ sf1 ? get = P0010001 , P0030002 ,
+    P0030003 ,
+    P0030004 , P0030005 , P0030006 , P0030007 , P0030008 ,
+    P0040003 , P0120002 , P0130001
+    & for = zip + code + tabulation + area :*& in = state : "
+    link = " $link$i "
+    last = " & key =2 b44e23300ed4875432476f48462e597fec9843d "
+    link = " $link$last "
+    curl $link | sed 1 d >> outp . txt
+done
+sed -i ’’ ’s /]]/] ,/ g ’ outp . txt
+sed -i ’’ ’s / ,/ /g ’ outp . txt
+sed -i ’’ ’s /[[: punct :]]// g ’ outp . txt
