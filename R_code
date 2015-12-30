@@ -1,0 +1,314 @@
+library ( zipcode )
+data ( zipcode )
+library ( plyr )
+library ( sp )
+library ( maps )
+library ( rgeos )
+library ( maptools )
+library ( stargazer )
+library ( maps )
+library ( sp )
+library ( ggplot2 )
+require ( foreign )
+require ( MASS )
+# loads alldata
+zipdata . initial <- read . table ( " ~ / Desktop / honors thesis / thesiscode /
+	outp . txt " , sep = " " , header = TRUE )
+complaints <- read . csv ( " ~ / Desktop / Consumer _ Complaints . csv " )
+income _ all <- read . csv ( " ~ / Desktop / 12 zpallnoagi . csv " )
+# execute part
+zipdata <- zipdata . initial
+colnames ( zipdata ) <- c ( " Tot . Pol " ," White . Alone " ," Black . Alone " ,"
+	NAmerican . Alone " ," AAmerican . Alone " ," Native . Hawaiian " ," Some . Other "
+	," Twoormore " ," Hispanic " ," Male " ," Median . Age " ," Total . Family .
+	Households " ," Single . Dad " ," Single . Mom " ," Avg . Family . Size " ," StateNo "
+	66
+	," zip " ," " )
+zipdata <- zipdata [ ,1: ncol ( zipdata ) -1]
+# convert to numeric
+clnames <- c ( " Tot . Pol " ," White . Alone " ," Black . Alone " ," NAmerican . Alone "
+	," AAmerican . Alone " ," Native . Hawaiian " ," Some . Other " ," Twoormore " ,"
+	Hispanic " ," Male " ," Median . Age " ," Total . Family . Households " ," Single .
+	Dad " ," Single . Mom " ," Avg . Family . Size " )
+zipdata [ clnames ] <- sapply ( zipdata [ clnames ] , as . numeric )
+# zipdata = ddply ( zipdata ,.( zip ) , colwise ( sum ) )
+# function for family size
+famsize = function ( x ) {
+	if (x >10 & x <100) {
+		return ( x / 10)
+		} else if (x >=100) {
+			return ( x / 100)
+			} else {
+				return ( x )
+			}
+		}
+		zipdata $ Avg . Family . Size <- sapply ( zipdata $ Avg . Family . Size , famsize )
+# mutiple datapoints of same zip
+# zipdata = ddply ( sipdata , .( zip ) , FUN = sum )
+# loads complaint data
+output _ mydata . final <- function ( x ) {
+	c _ complaints <-x
+	colnames ( c _ complaints ) [ colnames ( c _ complaints ) == " ZIP . code " ] <- " zip
+	"
+	67
+	c _ complaints $ zip = as . integer ( c _ complaints $ zip )
+# cleans up the zip in complaints and merges with Zipdata
+# c_ complaints $zip = clean . zipcodes ( c_ complaints $zip )
+mydata <- join ( c _ complaints , zipcode , by = ’ zip ’ , type = " inner " )
+# mydata <-na . omit ( mydata )
+mydata $ zip <- as . factor ( mydata $ zip )
+mydata $ Count <- 1
+# Set the Latitude and Longitude Limits
+xlim <- c ( -125.00 , -66.00)
+ylim <- c (25.00 , 50.00)
+# Limit the data in our input variable mydata to lie within US
+boundary ( we are not considering Alaska and Hawaii Islands for
+	this case )
+mydata <- mydata [( mydata $ longitude < max ( xlim ) ) & ( mydata $ longitude
+	> min ( xlim ) ) ,]
+mydata <- mydata [( mydata $ latitude < max ( ylim ) ) & ( mydata $ latitude >
+	min ( ylim ) ) ,]
+#
+# Aggregate the Data by zipcode to sum up count for duplicate
+#zipcode records ( Check here that column B will have the sum of
+	#counts )
+#
+mydata . sum <- ddply ( mydata , c ( " zip " ) , summarize , B = sum ( Count ) )
+# In a separate variable , eliminate the duplicate records to keep
+#one record per zipcode
+#
+mydata . un <- mydata [ ! duplicated ( mydata [ c ( " zip " ) ]) ,]
+#68
+# Now Merge the Aggregated zipcode variable with unique zipcode
+variable as both variables will have one record per zipcode
+mydata . final = join ( mydata . sum , mydata . un , by = ’ zip ’ , type = " inner " )
+# doing experiments with the population density now assumes that zipdata is loaded
+mydata . final <- join ( mydata . final , zipdata , by = ’ zip ’ , type = " inner " )
+# Let ’ s do some regressions
+# Merging Income Data
+# importing income now
+income <- subset ( income _ all , select = c ( ZIPCODE , A00100 , N1 ) )
+income $ Total . income <- income $ A00100 / income $ N1 * 1000;
+income <- income [ , c (1 ,4) ]
+colnames ( income ) <- c ( " zip " ," Total . income " )
+mydata . final = join ( mydata . final , income , by = ’ zip ’ , type = " inner " )
+# Preparing variables for OLS
+mydata . final $ B = mydata . final $ B / mydata . final $ Tot . Pol * 1000
+mydata . final $ White . Alone = mydata . final $ White . Alone / mydata . final $ Tot
+. Pol
+mydata . final $ Black . Alone = mydata . final $ Black . Alone / mydata . final $ Tot
+. Pol
+mydata . final $ Hispanic = mydata . final $ Hispanic / mydata . final $ Tot . Pol
+mydata . final $ NAmerican . Alone = mydata . final $ NAmerican . Alone / mydata .
+final $ Tot . Pol
+mydata . final $ AAmerican . Alone = mydata . final $ AAmerican . Alone / mydata .
+final $ Tot . Pol
+69
+mydata . final $ Native . Hawaiian = mydata . final $ Native . Hawaiian / mydata .
+final $ Tot . Pol
+mydata . final $ Some . Other = mydata . final $ Some . Other / mydata . final $ Tot .
+Pol
+mydata . final $ Twoormore = mydata . final $ Twoormore / mydata . final $ Tot . Pol
+mydata . final $ Single . Dad = mydata . final $ Single . Dad / mydata . final $ Total
+. Family . Households
+mydata . final $ Single . Mom = mydata . final $ Single . Mom / mydata . final $ Total
+. Family . Households
+mydata . final $ Male = mydata . final $ Male / mydata . final $ Tot . Pol
+mydata . final $ Female =1 - mydata . final $ Male
+mydata . final $ Total . income = mydata . final $ Total . income / 100000
+medianage <- function ( x ) {
+	if (x <10) {
+		return ( x * 10)
+		} else if (x >100) {
+			return ( x / 10)
+			} else {
+				return ( x )
+			}
+		}
+		mydata . final $ Median . Age = sapply ( mydata . final $ Median . Age , medianage )
+		colnames ( mydata . final ) [ colnames ( mydata . final ) == " B " ] <- " com _ count "
+		return ( mydata . final )
+	}
+	generate . lmmodel <- function ( x ) {
+# comparing linmodels on all financial products
+linmodel1 = rlm ( formula = com _ count ~ Black . Alone + NAmerican . Alone +
+	AAmerican . Alone + Native . Hawaiian + Some . Other + Twoormore , data =x ,
+	70
+	method = " MM " , psi = psi . bisquare )
+linmodel2 = rlm ( formula = com _ count ~ Black . Alone + NAmerican . Alone +
+	AAmerican . Alone + Native . Hawaiian + Some . Other + Twoormore + Hispanic ,
+	data =x , method = " MM " , psi = psi . bisquare )
+linmodel3 = rlm ( formula = com _ count ~ Black . Alone + NAmerican . Alone +
+	AAmerican . Alone + Native . Hawaiian + Some . Other + Twoormore + Hispanic +
+	Total . income , data =x , method = " MM " , psi = psi . bisquare )
+linmodel4 = rlm ( formula = com _ count ~ Black . Alone + NAmerican . Alone +
+	AAmerican . Alone + Native . Hawaiian + Some . Other + Twoormore + Hispanic +
+	Total . income + Female , data =x , method = " MM " , psi = psi . bisquare )
+linmodel5 = rlm ( formula = com _ count ~ Black . Alone + NAmerican . Alone +
+	AAmerican . Alone + Native . Hawaiian + Some . Other + Twoormore + Hispanic +
+	Total . income + Female + Median . Age , data =x , method = " MM " , psi = psi .
+	bisquare )
+return ( stargazer ( linmodel1 , linmodel2 , linmodel3 , linmodel4 , linmodel5
+	, title = " Results " , align = TRUE , font . size = " tiny " ) )
+}
+alldata . final <- output _ mydata . final ( complaints )
+creditcarddata <- output _ mydata . final ( subset ( complaints , Product == "
+	Credit card " ) )
+mortgagedata <- output _ mydata . final ( subset ( complaints , Product == "
+	Mortgage " ) )
+consumerloandata <- output _ mydata . final ( subset ( complaints , Product ==
+	" Consumer loan " ) )
+creditreportdata <- output _ mydata . final ( subset ( complaints , Product == "
+	Credit reporting " ) )
+bankaccountdata <- output _ mydata . final ( subset ( complaints , Product == "
+	Bank account or service " ) )
+71
+debtcolldata <- output _ mydata . final ( subset ( complaints , Product == " Debt
+	collection " ) )
+pairs ( creditcarddata $ Total . income ~ creditcarddata $ Black . Alone +
+	creditcarddata $ Hispanic + creditcarddata $ NAmerican . Alone +
+	creditcarddata $ AAmerican . Alone + creditcarddata $ Femaledummy +
+	creditcarddata $ Median . Age )
+ppairs <- function ( x ) {
+	return ( plotpairs ( x $ Total . income ~ x $ Black . Alone + x $ Hispanic + x $
+		NAmerican . Alone + x $ AAmerican . Alone + x $ + x $ Median . Age ) )
+}
+ppairs ( alldata . final )
+stargazer ( cor ( subset ( alldata . final , select = c
+	(23 ,24 ,25 ,26 ,27 ,28 ,29 ,31 ,38 ,37) ) ) )
+stargazer ( cor ( subset ( creditcarddata , select = c
+	(23 ,24 ,25 ,26 ,27 ,28 ,29 ,31 ,38 ,37) ) ) )
+stargazer ( cor ( subset ( mortgagedata , select = c
+	(23 ,24 ,25 ,26 ,27 ,28 ,29 ,31 ,38 ,37) ) ) )
+stargazer ( cor ( subset ( consumerloandata , select = c
+	(23 ,24 ,25 ,26 ,27 ,28 ,29 ,31 ,38 ,37) ) ) )
+stargazer ( cor ( subset ( creditreportdata , select = c
+	(23 ,24 ,25 ,26 ,27 ,28 ,29 ,31 ,38 ,37) ) ) )
+stargazer ( cor ( subset ( bankaccountdata , select = c
+	(23 ,24 ,25 ,26 ,27 ,28 ,29 ,31 ,38 ,37) ) ) )
+stargazer ( cor ( subset ( debtcolldata , select = c
+	(23 ,24 ,25 ,26 ,27 ,28 ,29 ,31 ,38 ,37) ) ) )
+72
+generate . lmmodel ( alldata . final )
+generate . lmmodel ( creditcarddata )
+generate . lmmodel ( mortgagedata )
+generate . lmmodel ( consumerloandata )
+generate . lmmodel ( creditreportdata )
+generate . lmmodel ( bankaccountdata )
+generate . lmmodel ( debtcolldata )
+# overall comparison
+alldatam = rlm ( formula = com _ count ~ Black . Alone + NAmerican . Alone +
+	AAmerican . Alone + Native . Hawaiian + Some . Other + Twoormore + Hispanic +
+	Total . income + Female + Median . Age , data = alldata . final , method = " MM " ,
+	psi = psi . bisquare )
+creditcarddatam = rlm ( formula = com _ count ~ Black . Alone + NAmerican . Alone +
+	AAmerican . Alone + Native . Hawaiian + Some . Other + Twoormore + Hispanic +
+	Total . income + Female + Median . Age , data = creditcarddata , method = " MM " ,
+	psi = psi . bisquare )
+mortgagedatam = rlm ( formula = com _ count ~ Black . Alone + NAmerican . Alone +
+	AAmerican . Alone + Native . Hawaiian + Some . Other + Twoormore + Hispanic +
+	Total . income + Female + Median . Age , data = mortgagedata , method = " MM " , psi
+	= psi . bisquare )
+consumerloandatam = rlm ( formula = com _ count ~ Black . Alone + NAmerican . Alone
+	+ AAmerican . Alone + Native . Hawaiian + Some . Other + Twoormore + Hispanic +
+	Total . income + Female + Median . Age , data = consumerloandata , method = " MM "
+	, psi = psi . bisquare )
+creditreportdatam = rlm ( formula = com _ count ~ Black . Alone + NAmerican . Alone
+	+ AAmerican . Alone + Native . Hawaiian + Some . Other + Twoormore + Hispanic +
+	Total . income + Female + Median . Age , data = creditreportdata , method = " MM "
+	73
+	, psi = psi . bisquare )
+bankaccountdatam = rlm ( formula = com _ count ~ Black . Alone + NAmerican . Alone +
+	AAmerican . Alone + Native . Hawaiian + Some . Other + Twoormore + Hispanic +
+	Total . income + Female + Median . Age , data = bankaccountdata , method = " MM " ,
+	psi = psi . bisquare )
+debtcolldatam = rlm ( formula = com _ count ~ Black . Alone + NAmerican . Alone +
+	AAmerican . Alone + Native . Hawaiian + Some . Other + Twoormore + Hispanic +
+	Total . income + Female + Median . Age , data = debtcolldata , method = " MM " , psi
+	= psi . bisquare )
+stargazer ( alldatam , creditcarddatam , mortgagedatam , consumerloandatam ,
+	creditreportdatam , bankaccountdatam , debtcolldatam , title = " Model 5
+	across Regressions " , align = TRUE , font . size = " footnotesize " , column .
+	labels = c ( " All products " ," Credit Card " ," Mortgage " ," Consumer Loan " ,
+		" Credit Report " ," Bank Accounts " ," Debt Coll " ) )
+# heatplot
+createmap ( alldata . final )
+createmap ( creditcarddata )
+createmap ( mortgagedata )
+createmap ( consumerloandata )
+createmap ( creditreportdata )
+createmap ( bankaccountdata )
+createmap ( debtcolldata )
+createmap <- function ( x ) {
+	mapdata . final = x
+	names ( mapdata . final ) [2] <-" B "
+	mapdata . final $ count <- mapdata . final $ B * mapdata . final $ Tot . Pol
+	74
+#
+# Get rid of extra columns and select only the columns that we might need
+#
+mapdata <- subset ( mapdata . final , select = c ( ’ zip ’ , ’B ’ , ’ city ’ , ’ state ’ , ’
+	latitude ’ , ’ longitude ’ ," Tot . Pol " ," count " ) )
+#
+# Rename Column B to count as it houses the counts
+#
+#
+# Now we have the data prepared . Lets have a look at refined datanow
+#
+mapcounties <- map _ data ( " county " )
+mapstates <- map _ data ( " state " )
+counties <- map ( ’ county ’ , fill = TRUE , col = " transparent " , plot = FALSE )
+IDs <- sapply ( strsplit ( counties $ names , " : " ) , function ( x ) x [1])
+counties _ sp <- map2SpatialPolygons ( counties , IDs = IDs , proj4string =
+	CRS ( " + proj = longlat + datum = WGS84 " ) )
+pointsSP <- SpatialPoints ( as . data . frame ( mapdata [ , c ( ’ longitude ’ , ’
+	latitude ’) ]) , proj4string = CRS ( " + proj = longlat + datum = WGS84 " ) )
+indices <- over ( pointsSP , counties _ sp )
+countyNames <- sapply ( counties _ sp@polygons , function ( x ) x@ID )
+mapdata $ county <- countyNames [ indices ]
+#
+75
+# Generate Comma Separated County / Subregion list for all Counties of US
+#
+mapcounties $ county <- with ( mapcounties , paste ( region , subregion ,
+	sep = " ," ) )
+# Aggregate our data at County Level ( it was earlier aggreated at zipcode level )
+mapdata . sum <- ddply ( mapdata , c ( " county " ) , summarize , counts = sum (
+	count ) / sum ( Tot . Pol ) * 1000)
+# Remove any duplicate records
+#
+mapdata . un <- mapdata [ ! duplicated ( mapdata [ c ( " county " ) ]) ,]
+#
+# Merge the unique COunty list with the aggregated record list to get the final list
+#
+mapdata . final = merge ( mapdata . sum , mapdata . un , by . x = ’ county ’ , by . y = ’
+	county ’)
+#
+# Initialise the ColorBucket to divide the count and and use it for distributing colors for the heat - map
+#
+mapdata . final $ colorBuckets <- as . factor ( as . numeric ( cut ( mapdata . final
+	$ counts , c (1 ,10 ,100 ,500 ,1000 ,5000) ) ) )
+print ( max ( mapdata . final $ counts ) )
+#
+# Merge our data with all US counties data 76
+#
+mergedata <- merge ( mapcounties , mapdata . final , by . x = " county " , by . y
+	= " county " )
+#
+# Arrange the Data in sorted order of Counts ( this step may be removed )
+#
+mergedata <- mergedata [ order ( mergedata $ counts ) ,]
+#
+# Now plot the data on a map using ggplot function from ggplot2 package
+#
+map <- ggplot ( mergedata , aes ( long , lat , group = group ) ) + geom _ polygon (
+	aes ( fill = colorBuckets ) )
+map = map + theme ( panel . background = element _ rect ( fill = " white " ) )
+map <- map + scale _ fill _ grey ( start =1.0 , end =0.0) +
+coord _ map ( project = " globular " )
+map <- map + geom _ path ( data = mapstates , colour = " black " , size =
+	.3)
+map <- map + geom _ path ( data = mapcounties , colour = " white " , size =
+	.5 , alpha = .1)
+return ( map )
+}
